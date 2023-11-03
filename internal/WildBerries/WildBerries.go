@@ -1,6 +1,7 @@
 package WildBerries
 
 import (
+	"WildBerries/internal/Telegra"
 	"context"
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 	"sync"
@@ -19,7 +20,9 @@ type Parser struct {
 	timeStarted   time.Time
 	articles      map[int]Advert
 	articlesMutex sync.RWMutex
+	Telega        *Telegra.Sender
 }
+
 type Ja3Worker struct {
 	Ja3Client  cycletls.CycleTLS
 	Ja3Ciphers string
@@ -56,6 +59,7 @@ func NewParser() *Parser {
 		timeStarted:   time.Now(),
 		articles:      map[int]Advert{},
 		articlesMutex: sync.RWMutex{},
+		Telega:        Telegra.NewSender(ctx),
 	}
 	return &P
 }
@@ -67,6 +71,20 @@ func (wb *Parser) addMapArticle(adv Advert) {
 	if _, ok := wb.articles[adv.Id]; !ok {
 		wb.articles[adv.Id] = adv
 	}
+}
+
+// Обновляет информацию по уже имеющимся товарам
+func (wb *Parser) updateMapArticle(adv Advert) (bool, int) {
+	wb.articlesMutex.Lock()
+	defer wb.articlesMutex.Unlock()
+	if art, ok := wb.articles[adv.Id]; ok {
+		if art.PriceSale > adv.PriceSale {
+			priceOld := art.PriceSale
+			wb.articles[adv.Id] = adv
+			return true, priceOld
+		}
+	}
+	return false, 0
 }
 
 // SetOrigLink Устанавливает ссылку для поиска по категории
