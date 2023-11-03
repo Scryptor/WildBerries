@@ -61,6 +61,7 @@ func NewParser() *Parser {
 		articlesMutex: sync.RWMutex{},
 		Telega:        Telegra.NewSender(ctx),
 	}
+	go P.updateArticles()
 	return &P
 }
 

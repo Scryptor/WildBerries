@@ -1,6 +1,7 @@
 package WildBerries
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -19,25 +20,38 @@ func (wb *Parser) AddArticles(arts []string) {
 	wb.getFullAdvert(arts)
 }
 
-// UpdateArticles Обновляет данные по сохраненным товарам
-func (wb *Parser) UpdateArticles() {
-	wb.articlesMutex.Lock()
-	defer wb.articlesMutex.Unlock()
-	ArtsByParts400 := make([][]string, 0, len(wb.articles)/400+1)
-	counter := 0
-	arrIndex := 0
-	for key := range wb.articles {
-		if counter >= 400 {
-			counter = 0
-			arrIndex++
-			ArtsByParts400 = append(ArtsByParts400, []string{})
+// updateArticles Обновляет данные по сохраненным товарам
+func (wb *Parser) updateArticles() {
+	t := time.NewTicker(30 * time.Minute)
+	ctx, _ := context.WithCancel(wb.ctx)
+	for {
+		select {
+		case <-t.C:
+			wb.articlesMutex.Lock()
+
+			ArtsByParts400 := make([][]string, 0, len(wb.articles)/400+1)
+			counter := 0
+			arrIndex := 0
+			for key := range wb.articles {
+				if counter >= 400 {
+					counter = 0
+					arrIndex++
+					ArtsByParts400 = append(ArtsByParts400, []string{})
+				}
+				ArtsByParts400[arrIndex] = append(ArtsByParts400[0], strconv.Itoa(key))
+				counter++
+			}
+
+			wb.articlesMutex.Unlock()
+			for _, articles400 := range ArtsByParts400 {
+				wb.updateFullAdvert(articles400)
+			}
+		case <-ctx.Done():
+			log.Println("Останавливаю обновление товаров")
+			return
 		}
-		ArtsByParts400[arrIndex] = append(ArtsByParts400[0], strconv.Itoa(key))
-		counter++
 	}
-	for _, articles400 := range ArtsByParts400 {
-		wb.updateFullAdvert(articles400)
-	}
+
 }
 
 // Получает товары по артикулам. Не более 400 артикулов за раз
