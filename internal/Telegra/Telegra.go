@@ -16,7 +16,8 @@ import (
 
 type Sender struct {
 	Client      *http.Client
-	Chat        string
+	Chat        int64
+	TgId        int64
 	Token       string
 	AdvertsList []Advert
 	ctx         context.Context
@@ -41,14 +42,15 @@ type Advert struct {
 	OldPrice    int
 }
 
-func NewSender(ctx context.Context) *Sender {
+func NewSender(ctx context.Context, tgid, chat int64) *Sender {
 	cctx, _ := context.WithCancel(ctx)
 	sndr := Sender{
 		Client:      &http.Client{Timeout: 10 * time.Second},
 		Token:       "6917956424:AAE0CG0KfslaxAQt3QwnOINHYOSxzqwGtj8",
-		Chat:        "304857743", // "-4059251970", //  //
+		Chat:        chat,
 		AdvertsList: make([]Advert, 0, 50),
 		ctx:         cctx,
+		TgId:        tgid,
 	}
 	go sndr.StartSending()
 	return &sndr
@@ -110,7 +112,7 @@ func (Tgs *Sender) sendWithPhotoIfNoFullAdvert(fAdvert Advert) error {
 func (Tgs *Sender) sendPostMessage(message string, photoUrl string) error {
 	data := url.Values{}
 
-	data.Add("chat_id", Tgs.Chat)
+	data.Add("chat_id", fmt.Sprintf("%d", Tgs.Chat))
 	data.Add("text", message)
 	var sendMode string
 
@@ -146,7 +148,7 @@ func (Tgs *Sender) SendHelloMessage(message, link, name string) error {
 
 	data := url.Values{}
 	data.Add("text", mln)
-	data.Add("chat_id", Tgs.Chat)
+	data.Add("chat_id", fmt.Sprintf("%d", Tgs.Chat))
 	var sendMode string
 
 	sendMode = "sendMessage"

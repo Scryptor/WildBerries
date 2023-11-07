@@ -3,6 +3,8 @@ package WildBerries
 import (
 	"WildBerries/internal/Telegra"
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 	"strings"
@@ -22,6 +24,7 @@ type Parser struct {
 	articles      map[int]Advert
 	articlesMutex sync.RWMutex
 	Telega        *Telegra.Sender
+	Hash          string
 }
 
 type Ja3Worker struct {
@@ -47,7 +50,7 @@ type Advert struct {
 	Pics        int
 }
 
-func NewParser() *Parser {
+func NewParser(tgId, tgChat int64) *Parser {
 	ctx, Cancel := context.WithCancel(context.Background())
 	P := Parser{
 		ja3Worker: Ja3Worker{
@@ -61,8 +64,10 @@ func NewParser() *Parser {
 		timeStarted:   time.Now(),
 		articles:      map[int]Advert{},
 		articlesMutex: sync.RWMutex{},
-		Telega:        Telegra.NewSender(ctx),
+		Telega:        Telegra.NewSender(ctx, tgId, tgChat),
 	}
+	strToMd5h := fmt.Sprintf("%d", P.Telega.TgId)
+	P.Hash = P.MakeHashFromString(strToMd5h)
 	go P.updateArticles()
 	return &P
 }
@@ -147,4 +152,17 @@ func (wb *Parser) GetArticlesCount() int {
 	wb.articlesMutex.RLock()
 	defer wb.articlesMutex.RUnlock()
 	return len(wb.articles)
+}
+
+func (wb *Parser) GetLKLink() string {
+	link := fmt.Sprintf("http://127.0.0.1:4445?tgid=%d&hash=%s", wb.Telega.TgId, wb.Hash)
+	return link
+}
+
+func (wb *Parser) MakeHashFromString(str string) string {
+	hash := md5.Sum([]byte(str + "SomeSecretWordWb_"))
+
+	// Преобразование хеша в строку в шестнадцатеричном формате
+	hashString := hex.EncodeToString(hash[:])
+	return hashString
 }
