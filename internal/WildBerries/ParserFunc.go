@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -79,6 +80,7 @@ func (wb *Parser) getFullAdvert(articles []string) {
 			PriceSale:   val.SalePriceU,
 			Name:        val.Name,
 			Brand:       val.Brand,
+			Pics:        val.Pics,
 		}
 		wb.addMapArticle(adv)
 	}
@@ -109,6 +111,7 @@ func (wb *Parser) updateFullAdvert(articles []string) {
 			PriceSale:   val.SalePriceU,
 			Name:        val.Name,
 			Brand:       val.Brand,
+			Pics:        val.Pics,
 		}
 		isNewPrice, oldPrice := wb.updateMapArticle(adv)
 		if isNewPrice {
@@ -127,43 +130,49 @@ func (wb *Parser) updateFullAdvert(articles []string) {
 }
 
 // GetWBAdverts Получает список товаров в категории
-func (wb *Parser) GetWBAdverts(link string) {
-	t := time.NewTicker(5 * time.Second)
-	for {
-		select {
-		case <-t.C:
-			response, err := wb.GetDataFromWb(link)
-			if err != nil {
-				continue
-			}
-			var WBAdverts WbAdvertsJson
+func (wb *Parser) GetWBAdverts(link string) int {
 
-			err = json.Unmarshal([]byte(response.Body), &WBAdverts)
-			if err != nil {
-				wb.allErrors = append(wb.allErrors, fmt.Sprintf("Json Unmarshal Failed: %s", err.Error()))
-				wb.metrics.BadJson.Add(1)
-				return
-			}
-
-			wb.metrics.GoodReq.Add(1)
-			for _, val := range WBAdverts.Data.Products {
-				if _, ok := wb.allAdverts[val.Id]; !ok {
-
-					wb.allAdverts[val.Id] = Advert{
-						Name:  val.Name,
-						Brand: val.Brand,
-						Price: val.SalePriceU,
-						Link:  fmt.Sprintf("https://www.wildberries.ru/catalog/%d/detail.aspx", val.Id),
-					}
-					log.Println(val.Name)
-					if wb.canSend() {
-						log.Println(val)
-					}
-
-				}
-			}
-		case <-wb.ctx.Done():
-			return
-		}
+	response, err := wb.GetDataFromWb(link)
+	if err != nil {
+		wb.allErrors = append(wb.allErrors, fmt.Sprintf("Ошибка запроса: %s", err.Error()))
+		wb.metrics.BadReq.Add(1)
+		return 0
 	}
+	var WBAdverts WbAdvertsJson
+
+	err = json.Unmarshal([]byte(response.Body), &WBAdverts)
+	if err != nil {
+		wb.allErrors = append(wb.allErrors, fmt.Sprintf("Json Unmarshal Failed: %s", err.Error()))
+		wb.metrics.BadJson.Add(1)
+		return 0
+	}
+
+	wb.metrics.GoodReq.Add(1)
+	for _, val := range WBAdverts.Data.Products {
+		wb.addMapArticle(struct {
+			Id          int
+			Link        string
+			ParsingDate time.Time
+			Price       int
+			PriceSale   int
+			Name        string
+			Brand       string
+			Images      []string
+			Pics        int
+		}{Id: val.Id, ParsingDate: time.Now(), Price: val.PriceU, PriceSale: val.SalePriceU, Name: val.Name, Brand: val.Brand, Pics: val.Pics})
+	}
+	return len(WBAdverts.Data.Products)
+}
+
+func (wb *Parser) GetAllArticles() []Advert {
+	wb.articlesMutex.RLock()
+	defer wb.articlesMutex.RUnlock()
+	advs := make([]Advert, 0, len(wb.articles))
+	for _, val := range wb.articles {
+		advs = append(advs, val)
+	}
+	sort.Slice(advs, func(i, j int) bool {
+		return advs[i].ParsingDate.After(advs[j].ParsingDate)
+	})
+	return advs
 }
